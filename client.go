@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 )
@@ -11,7 +12,21 @@ func main() {
 		fmt.Printf("Did not connect")
 	} else {
 		fmt.Printf("Connected, hooray!\n")
-		conn.Write([]byte("This is a message from the client\n"))
+		//var test string
+		//fmt.Scanf("%s", &test)
+		conn.Write([]byte("This is a mesage from the client"))
 	}
+
+	b := bufio.NewReader(conn)
+
+	for {
+		line, err := b.ReadString('\n')
+		if err != nil { // EOF, or worse
+			break
+		}
+		//client.Write(line)
+		fmt.Printf(line)
+	}
+
 	conn.Close()
 }
