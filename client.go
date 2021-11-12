@@ -10,10 +10,8 @@ func main() {
 	if err != nil {
 		fmt.Printf("Did not connect")
 	} else {
-		fmt.Printf("Connected, hooray!")
-		for ( true){
-
-		}
+		fmt.Printf("Connected, hooray!\n")
+		conn.Write([]byte("This is a message from the client\n"))
 	}
 	conn.Close()
 }
