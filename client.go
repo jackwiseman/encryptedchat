@@ -11,6 +11,9 @@ func main() {
 		fmt.Printf("Did not connect")
 	} else {
 		fmt.Printf("Connected, hooray!")
+		for ( true){
+
+		}
 	}
 	conn.Close()
 }
