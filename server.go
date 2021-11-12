@@ -4,10 +4,10 @@
 package main
 
 import (
-	"net"
 	"bufio"
-	"strconv"
 	"fmt"
+	"net"
+	"strconv"
 )
 
 const PORT = 3540
@@ -42,13 +42,19 @@ func clientConns(listener net.Listener) chan net.Conn {
 }
 
 func handleConn(client net.Conn) {
-	b := bufio.NewReader(client)
 	for {
+		b := bufio.NewReader(client)
 		line, err := b.ReadString('\n')
 		if err != nil { // EOF, or worse
 			break
 		}
 		//client.Write(line)
 		fmt.Printf(line)
+		response(client, line)
 	}
+}
+
+func response(client net.Conn, line string) {
+	out := "echo: " + line
+	client.Write([]byte(out))
 }
