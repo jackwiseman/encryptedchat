@@ -1,8 +1,4 @@
-// $ 6g echo.go && 6l -o echo echo.6
 // $ ./echo
-//
-//  ~ in another terminal ~
-//
 // $ nc localhost 3540
 
 package main
