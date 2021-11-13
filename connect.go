@@ -11,7 +11,7 @@ import (
 func main() {
 	arguments := os.Args
 	if len(arguments) == 1 {
-		fmt.Println("Please provide host:port.")
+		fmt.Println("# Please provide host:port.")
 		return
 	}
 
@@ -22,7 +22,7 @@ func main() {
 		return
 	}
 	ch := make(chan string)
-	fmt.Println("You have joined encryptedchat. Type /help for more info.")
+	fmt.Println("# You have joined encryptedchat. Type /help for more info, /quit to exit.")
 	go printer(ch)
 	go listener(ch, c)
 
@@ -33,8 +33,8 @@ func main() {
 
 
 
-		if strings.TrimSpace(string(text)) == "STOP" {
-			fmt.Println("TCP client exiting...")
+		if strings.TrimSpace(string(text)) == "/quit" {
+			fmt.Println("# Disconnected")
 			return
 		}
 

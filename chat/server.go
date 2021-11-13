@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -52,14 +51,18 @@ func (s *server) newClient(conn net.Conn) {
 }
 
 func (s *server) username(c *client, args []string) {
+  	if len(args) != 2 {
+		c.eventMsg(fmt.Sprintf("Your username must be one word, please try again"))
+		return
+	}
 	c.username = args[1]
-	c.msg(fmt.Sprintf("You are logged in as %s", c.username))
+	c.eventMsg(fmt.Sprintf("You are logged in as %s", c.username))
 }
 
 func (s *server) join(c *client, args []string) {
 
-  if len(args) != 2 {
-		c.msg(fmt.Sprintf("Please specify a room name you would like to join"))
+	if len(args) != 2 {
+		c.eventMsg(fmt.Sprintf("Please specify a room name you would like to join (rooms must be one word)"))
 		return
 	}
   
@@ -74,7 +77,7 @@ func (s *server) join(c *client, args []string) {
 			s.rooms[roomName] = r
 		}
 		if len(r.members) >= 2 {
-			c.msg(fmt.Sprintf("You can't join that room!"))
+			c.eventMsg(fmt.Sprintf("You can't join that room!"))
 		} else {
 			r.members[c.conn.RemoteAddr()] = c
 
@@ -82,10 +85,10 @@ func (s *server) join(c *client, args []string) {
 
 		s.quitCurrentRoom(c)
 		c.room = r
-		r.broadcast(c, fmt.Sprintf("%s has joined the room.", c.username))
-		c.msg(fmt.Sprintf("Welcome to the room %s", r.name))
+		r.broadcast(c, fmt.Sprintf("%s has joined the room.", c.username), true)
+		c.eventMsg(fmt.Sprintf("Welcome to the room %s", r.name))
 	} else {
-		c.msg(fmt.Sprintf("You must login before joining a room!"))
+		c.eventMsg(fmt.Sprintf("You must login before joining a room!"))
 	}
 }
 
@@ -96,36 +99,39 @@ func (s *server) listRooms(c *client, args []string) {
 	}
 
 	if len(rooms) == 0 {
-		c.msg(fmt.Sprintf("There are no active rooms, create one with /join {name}"))
+		c.eventMsg(fmt.Sprintf("There are no active rooms, create one with /join {name}"))
 	} else {
-		c.msg(fmt.Sprintf("Available rooms: %s", strings.Join(rooms, ", ")))
+		c.eventMsg(fmt.Sprintf("Available rooms: %s", strings.Join(rooms, ", ")))
 	}
 }
 
 func (s *server) msg(c *client, args []string) {
+	if c.username == "" {
+		c.eventMsg(fmt.Sprintf("You must login before sending a message - /login {username}"))
+		return
+	}
 	if c.room == nil {
-		c.err(errors.New("You must join a room before sending a message"))
+		c.eventMsg(fmt.Sprintf("You must join a room before sending a message - /join {room name}"))
 		return
 	}
 
-	c.room.broadcast(c, c.username+": "+strings.Join(args, " "))
+	c.room.broadcast(c, c.username+": "+strings.Join(args, " "), false)
 }
 
 func (s *server) quit(c *client, args []string) {
 	log.Printf("Client has disconnected: %s", c.conn.RemoteAddr().String())
 
 	s.quitCurrentRoom(c)
-	c.msg("Come back soon!")
 	c.conn.Close()
 }
 
 func (s *server) help(c *client, args[]string) {
-	c.msg("/join {room name}, /rooms, /quit")
+	c.eventMsg("/join {room name}, /rooms, /quit")
 }
 
 func (s *server) quitCurrentRoom(c *client) {
 	if c.room != nil {
 		delete(c.room.members, c.conn.RemoteAddr())
-		c.room.broadcast(c, fmt.Sprintf("%s has left the room.", c.username))
+		c.room.broadcast(c, fmt.Sprintf("%s has left the room.", c.username), true)
 	}
 }
