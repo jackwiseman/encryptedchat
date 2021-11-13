@@ -51,9 +51,15 @@ func (c *client) readInput() {
 				client: c,
 				args:   args,
 			}
+		case "/help":
+			c.commands <- command{
+				id:	CMD_HELP,
+				client: c,
+				args:	args,
+			}
 		default:
 			if cmd[0] == '/' {
-				c.err(fmt.Errorf("Unknown command: %s", cmd))
+				c.err(fmt.Errorf("Unknown command: %s, use /help to list all commands", cmd))
 			} else {
 				c.commands <- command{
 					id:     CMD_MSG,

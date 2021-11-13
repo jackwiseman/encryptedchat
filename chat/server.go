@@ -27,12 +27,14 @@ func (s *server) run() {
 			s.username(cmd.client, cmd.args)
 		case CMD_JOIN:
 			s.join(cmd.client, cmd.args)
-		case CMD_ROOMS:
-			s.listRooms(cmd.client, cmd.args)
 		case CMD_MSG:
 			s.msg(cmd.client, cmd.args)
+		case CMD_ROOMS:
+			s.listRooms(cmd.client, cmd.args)
 		case CMD_QUIT:
 			s.quit(cmd.client, cmd.args)
+		case CMD_HELP:
+			s.help(cmd.client, cmd.args)
 		}
 	}
 }
@@ -55,6 +57,12 @@ func (s *server) username(c *client, args []string) {
 }
 
 func (s *server) join(c *client, args []string) {
+
+  if len(args) != 2 {
+		c.msg(fmt.Sprintf("Please specify a room name you would like to join"))
+		return
+	}
+  
 	if c.username != "" {
 		roomName := args[1]
 		r, ok := s.rooms[roomName]
@@ -69,6 +77,7 @@ func (s *server) join(c *client, args []string) {
 			c.msg(fmt.Sprintf("You can't join that room!"))
 		} else {
 			r.members[c.conn.RemoteAddr()] = c
+
 		}
 
 		s.quitCurrentRoom(c)
@@ -86,12 +95,16 @@ func (s *server) listRooms(c *client, args []string) {
 		rooms = append(rooms, name)
 	}
 
-	c.msg(fmt.Sprintf("Available rooms: %s", strings.Join(rooms, ", ")))
+	if len(rooms) == 0 {
+		c.msg(fmt.Sprintf("There are no active rooms, create one with /join {name}"))
+	} else {
+		c.msg(fmt.Sprintf("Available rooms: %s", strings.Join(rooms, ", ")))
+	}
 }
 
 func (s *server) msg(c *client, args []string) {
 	if c.room == nil {
-		c.err(errors.New("you must join a room before sending a message"))
+		c.err(errors.New("You must join a room before sending a message"))
 		return
 	}
 
@@ -104,6 +117,10 @@ func (s *server) quit(c *client, args []string) {
 	s.quitCurrentRoom(c)
 	c.msg("Come back soon!")
 	c.conn.Close()
+}
+
+func (s *server) help(c *client, args[]string) {
+	c.msg("/join {room name}, /rooms, /quit")
 }
 
 func (s *server) quitCurrentRoom(c *client) {
