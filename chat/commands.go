@@ -9,6 +9,7 @@ const (
 	CMD_ROOMS
 	CMD_MSG
 	CMD_QUIT
+	CMD_HELP
 )
 
 type command struct {
