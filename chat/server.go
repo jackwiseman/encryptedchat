@@ -44,7 +44,7 @@ func (s *server) newClient(conn net.Conn) {
 
 	c := &client{
 		conn:     conn,
-		username:     "Anonymous",
+		username:     "",
 		commands: s.commands,
 	}
 
@@ -58,27 +58,35 @@ func (s *server) username(c *client, args []string) {
 
 func (s *server) join(c *client, args []string) {
 
-	if len(args) != 2 {
+  if len(args) != 2 {
 		c.msg(fmt.Sprintf("Please specify a room name you would like to join"))
 		return
 	}
-
-	roomName := args[1]
-	r, ok := s.rooms[roomName]
-	if !ok {
-		r = &room{
-			name:    roomName,
-			members: make(map[net.Addr]*client),
+  
+	if c.username != "" {
+		roomName := args[1]
+		r, ok := s.rooms[roomName]
+		if !ok {
+			r = &room{
+				name:    roomName,
+				members: make(map[net.Addr]*client),
+			}
+			s.rooms[roomName] = r
 		}
-		s.rooms[roomName] = r
+		if len(r.members) >= 2 {
+			c.msg(fmt.Sprintf("You can't join that room!"))
+		} else {
+			r.members[c.conn.RemoteAddr()] = c
+
+		}
+
+		s.quitCurrentRoom(c)
+		c.room = r
+		r.broadcast(c, fmt.Sprintf("%s has joined the room.", c.username))
+		c.msg(fmt.Sprintf("Welcome to the room %s", r.name))
+	} else {
+		c.msg(fmt.Sprintf("You must login before joining a room!"))
 	}
-
-	r.members[c.conn.RemoteAddr()] = c
-
-	s.quitCurrentRoom(c)
-	c.room = r
-	r.broadcast(c, fmt.Sprintf("%s has joined the room.", c.username))
-	c.msg(fmt.Sprintf("Welcome to the room %s", r.name))
 }
 
 func (s *server) listRooms(c *client, args []string) {

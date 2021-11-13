@@ -22,6 +22,7 @@ func main() {
 		return
 	}
 	ch := make(chan string)
+	fmt.Println("You have joined encryptedchat. Type /help for more info.")
 	go printer(ch)
 	go listener(ch, c)
 
