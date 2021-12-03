@@ -1,6 +1,13 @@
 package main
 
 import (
+	//"crypto/rand"
+	"crypto/rsa"
+	//"crypto/sha256"
+	//"encoding/base64"
+	"encoding/gob"
+	//"strconv"
+	//"time"
 	"bufio"
 	"fmt"
 	"net"
@@ -8,7 +15,13 @@ import (
 	"strings"
 )
 
+type Message struct {
+	Msg string
+	Publickey rsa.PublicKey
+}
+
 func main() {
+
 	arguments := os.Args
 	if len(arguments) == 1 {
 		fmt.Println("# Please provide host:port.")
@@ -21,35 +34,50 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	ch := make(chan string)
+
+	gob.Register(new(Message))
+	dec := gob.NewDecoder(c)
+	enc := gob.NewEncoder(c)
+
+	ch := make(chan Message)
 	fmt.Println("# You have joined encryptedchat. Type /help for more info, /quit to exit.")
 	go printer(ch)
-	go listener(ch, c)
+	go listener(ch, dec)
 
 	for {
 		reader := bufio.NewReader(os.Stdin)
 		text, _ := reader.ReadString('\n')
-		fmt.Fprintf(c, text+"\n")
+		if text == ""{
+			continue
+		}
+		msg := new(Message)
+		msg.Msg = text
 
-
+		err := enc.Encode(msg)
+		if err != nil {
+			panic(err)
+		}
 
 		if strings.TrimSpace(string(text)) == "/quit" {
 			fmt.Println("# Disconnected")
 			return
 		}
-
-
 	}
 }
-func printer(ch chan string) {
+func printer(ch chan Message) {
 	for {
-		fmt.Printf(<-ch)
+		msg := <- ch
+		fmt.Printf(msg.Msg)
 	}
 }
 
-func listener(ch chan string, c net.Conn){
+func listener(ch chan Message, dec *gob.Decoder){
 	for {
-		message, _ := bufio.NewReader(c).ReadString('\n')
-		ch <- message
+		msg := new(Message)
+		err := dec.Decode(msg)
+		if err != nil {
+			panic(err)
+		}
+		ch <- *msg
 	}
 }
