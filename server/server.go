@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/gob"
 	"fmt"
 	"log"
 	"net"
@@ -42,6 +43,8 @@ func (s *server) newClient(conn net.Conn) {
 	log.Printf("New Client has connected: %s", conn.RemoteAddr().String())
 
 	c := &client{
+		enc: *gob.NewEncoder(conn),
+		dec: *gob.NewDecoder(conn),
 		conn:     conn,
 		username:     "",
 		commands: s.commands,
