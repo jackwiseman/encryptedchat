@@ -1,30 +1,44 @@
 package main
 
 import (
-	"bufio"
+	"crypto/rsa"
+	"encoding/gob"
 	"fmt"
 	"net"
 	"strings"
 )
 
 type client struct {
+	enc      gob.Encoder
+	dec      gob.Decoder
 	conn     net.Conn
 	username     string
 	room     *room
 	commands chan<- command
 }
 
+type Message struct {
+	Msg string
+	Publickey rsa.PublicKey
+}
+
 func (c *client) readInput() {
+
 	for {
-		msg, err := bufio.NewReader(c.conn).ReadString('\n')
+		msg := new(Message)
+		err := c.dec.Decode(msg)
 		if err != nil {
-			return
+			panic(err)
 		}
+		msgString := msg.Msg
+		msgString = strings.Trim(msgString, "\r\n")
 
-		msg = strings.Trim(msg, "\r\n")
-
-		args := strings.Split(msg, " ")
+		args := strings.Split(msgString, " ")
 		cmd := strings.TrimSpace(args[0])
+
+		if cmd == ""{
+			continue
+		}
 
 		switch cmd {
 		case "/login":
@@ -72,13 +86,31 @@ func (c *client) readInput() {
 }
 
 func (c *client) err(err error) {
-	c.conn.Write([]byte("ERROR: " + err.Error() + "\n"))
+	message := new(Message)
+	message.Msg = "ERROR: " + err.Error() + "\n"
+
+	err2 := c.enc.Encode(message)
+	if err2 != nil {
+		panic(err2)
+	}
 }
 
 func (c *client) msg(msg string) {
-	c.conn.Write([]byte(msg + "\n"))
+	message := new(Message)
+	message.Msg = msg + "\n"
+
+	err := c.enc.Encode(message)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (c* client) eventMsg(msg string) {
-	c.conn.Write([]byte("# " + msg + "\n"))
+	message := new(Message)
+	message.Msg = "# " + msg + "\n"
+
+	err := c.enc.Encode(message)
+	if err != nil {
+		panic(err)
+	}
 }
