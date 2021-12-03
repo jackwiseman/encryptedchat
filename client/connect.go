@@ -1,13 +1,8 @@
 package main
 
 import (
-	//"crypto/rand"
 	"crypto/rsa"
-	//"crypto/sha256"
-	//"encoding/base64"
 	"encoding/gob"
-	//"strconv"
-	//"time"
 	"bufio"
 	"fmt"
 	"net"
@@ -17,8 +12,12 @@ import (
 
 type Message struct {
 	Msg string
-	Publickey rsa.PublicKey
+	Sender string
+	PublicKey rsa.PublicKey
 }
+
+var encryptionKey rsa.PublicKey
+var myKey rsa.PrivateKey
 
 func main() {
 
@@ -35,9 +34,21 @@ func main() {
 		return
 	}
 
+
 	gob.Register(new(Message))
 	dec := gob.NewDecoder(c)
 	enc := gob.NewEncoder(c)
+
+	// Create and send key to server
+	loadPrivateKey(&myKey)
+
+	msg := new(Message)
+	msg.PublicKey = myKey.PublicKey
+
+	err = enc.Encode(msg)
+	if err != nil {
+		panic(err)
+	}
 
 	ch := make(chan Message)
 	fmt.Println("# You have joined encryptedchat. Type /help for more info, /quit to exit.")
@@ -46,19 +57,24 @@ func main() {
 
 	for {
 		reader := bufio.NewReader(os.Stdin)
-		text, _ := reader.ReadString('\n')
-		if text == ""{
+		input, _ := reader.ReadString('\n')
+		if input == ""{
 			continue
 		}
 		msg := new(Message)
-		msg.Msg = text
+		if encryptionKey.E != 0 && string(input)[0:1] != "/" {
+			msg.Msg = encrypt(input, encryptionKey)
+
+		} else {
+			msg.Msg = input
+		}
 
 		err := enc.Encode(msg)
 		if err != nil {
 			panic(err)
 		}
 
-		if strings.TrimSpace(string(text)) == "/quit" {
+		if strings.TrimSpace(string(input)) == "/quit" {
 			fmt.Println("# Disconnected")
 			return
 		}
@@ -66,8 +82,17 @@ func main() {
 }
 func printer(ch chan Message) {
 	for {
-		msg := <- ch
-		fmt.Printf(msg.Msg)
+		msg := <-ch
+		if (msg.Msg == "") {
+			encryptionKey = msg.PublicKey
+		} else {
+			if msg.PublicKey.E != 0 {
+				encryptionKey = msg.PublicKey
+				fmt.Printf(msg.Sender + ": " + decrypt(msg.Msg, myKey))
+			} else {
+				fmt.Printf(msg.Msg)
+			}
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/gob"
+	"crypto/rsa"
 	"fmt"
 	"log"
 	"net"
@@ -51,6 +52,8 @@ func (s *server) newClient(conn net.Conn) {
 	}
 
 	c.readInput()
+	var args []string
+	s.quit(c, args)
 }
 
 func (s *server) username(c *client, args []string) {
@@ -76,6 +79,7 @@ func (s *server) join(c *client, args []string) {
 			r = &room{
 				name:    roomName,
 				members: make(map[net.Addr]*client),
+				keys: make(map[net.Addr]rsa.PublicKey),
 			}
 			s.rooms[roomName] = r
 		}
@@ -83,6 +87,7 @@ func (s *server) join(c *client, args []string) {
 			c.eventMsg(fmt.Sprintf("You can't join that room!"))
 		} else {
 			r.members[c.conn.RemoteAddr()] = c
+			r.keys[c.conn.RemoteAddr()] = c.publicKey
 
 		}
 
@@ -118,7 +123,7 @@ func (s *server) msg(c *client, args []string) {
 		return
 	}
 
-	c.room.broadcast(c, c.username+": "+strings.Join(args, " "), false)
+	c.room.broadcast(c, strings.Join(args, " "), false)
 }
 
 func (s *server) quit(c *client, args []string) {
@@ -135,6 +140,7 @@ func (s *server) help(c *client, args[]string) {
 func (s *server) quitCurrentRoom(c *client) {
 	if c.room != nil {
 		delete(c.room.members, c.conn.RemoteAddr())
+		delete(c.room.keys, c.conn.RemoteAddr())
 		c.room.broadcast(c, fmt.Sprintf("%s has left the room.", c.username), true)
 	}
 }

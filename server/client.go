@@ -6,20 +6,25 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"errors"
+	"syscall"
+	"io"
 )
 
 type client struct {
-	enc      gob.Encoder
-	dec      gob.Decoder
-	conn     net.Conn
-	username     string
-	room     *room
+	enc gob.Encoder
+	dec gob.Decoder
+	publicKey rsa.PublicKey
+	conn net.Conn
+	username string
+	room *room
 	commands chan<- command
 }
 
 type Message struct {
 	Msg string
-	Publickey rsa.PublicKey
+	Sender string
+	PublicKey rsa.PublicKey
 }
 
 func (c *client) readInput() {
@@ -28,8 +33,13 @@ func (c *client) readInput() {
 		msg := new(Message)
 		err := c.dec.Decode(msg)
 		if err != nil {
-			panic(err)
+			if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, io.EOF) || strings.Contains(err.Error(), "use of closed network connection"){
+				return
+			} else {
+				panic(err)
+			}
 		}
+
 		msgString := msg.Msg
 		msgString = strings.Trim(msgString, "\r\n")
 
@@ -37,6 +47,7 @@ func (c *client) readInput() {
 		cmd := strings.TrimSpace(args[0])
 
 		if cmd == ""{
+			c.publicKey = msg.PublicKey
 			continue
 		}
 
@@ -95,9 +106,11 @@ func (c *client) err(err error) {
 	}
 }
 
-func (c *client) msg(msg string) {
+func (c *client) msg(msg string, sender *client) {
 	message := new(Message)
 	message.Msg = msg + "\n"
+	message.PublicKey = c.getEncryptionKey()
+	message.Sender = sender.username
 
 	err := c.enc.Encode(message)
 	if err != nil {
@@ -113,4 +126,31 @@ func (c* client) eventMsg(msg string) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// update the client's public key for encryption
+func (c *client) updateKey() {
+	var key rsa.PublicKey
+	for addr, k := range c.room.keys {
+		if addr != c.conn.RemoteAddr() {
+			key = k
+		}
+	}
+
+	message := new(Message)
+	message.PublicKey = key
+	err := c.enc.Encode(message)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (c *client) getEncryptionKey() rsa.PublicKey {
+	var key rsa.PublicKey
+	for addr, k := range c.room.keys {
+		if addr != c.conn.RemoteAddr() {
+			key = k
+		}
+	}
+	return key
 }
