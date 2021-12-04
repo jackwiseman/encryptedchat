@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+var SERVERKEY rsa.PrivateKey
+
 type server struct {
 	rooms    map[string]*room
 	commands chan command
@@ -24,6 +26,7 @@ func newServer() *server {
 }
 
 func (s *server) run() {
+	loadPrivateKey(&SERVERKEY)
 	for cmd := range s.commands {
 		switch cmd.id {
 		case CMD_LOGIN:
@@ -57,7 +60,8 @@ func (s *server) newClient(conn net.Conn) {
 		username:     "",
 		commands: s.commands,
 	}
-	//c.sendServerKey()
+
+	s.sendPublicKeyToClient(c)
 	c.readInput()
 	var args []string
 	s.quit(c, args)
@@ -68,15 +72,20 @@ func (s *server) login(c *client, args []string) {
 		c.eventMsg(fmt.Sprintf("Your username must be one word, please try again"))
 		return
 	}
-	c.username = args[1]
+	if args[1] == "server" || args[1] == "serverkey" || args[1] == "auth" {
+		c.eventMsg(fmt.Sprintf("Illegal name choice, please try again"))
+		return
+	}
+
 	for user, k := range s.users {
 		if k.E == c.publicKey.E && k.N.Cmp(c.publicKey.N) == 0 {
-			if c.username != user {
+			if args[1] != user {
 				c.eventMsg(fmt.Sprintf("You cannot login as that user, please try again"))
 				return
 			}
 		}
 	}
+	c.username = args[1]
 	key, ok := s.users[c.username]
 	if ok { // need to auth
 		c.eventMsg(fmt.Sprintf("Logging in as %s...", c.username))
@@ -97,6 +106,10 @@ func (s *server) changeName(c *client, args []string) {
 			c.eventMsg(fmt.Sprintf("That username is already taken, please try again"))
 			return
 		}
+	}
+	if args[1] == "server" || args[1] == "serverkey" || args[1] == "auth" {
+		c.eventMsg(fmt.Sprintf("Illegal name choice, please try again"))
+		return
 	}
 	c.username = args[1]
 	delete(s.users, c.username)
@@ -185,5 +198,15 @@ func (s *server) quitCurrentRoom(c *client) {
 		delete(c.room.members, c.conn.RemoteAddr())
 		delete(c.room.keys, c.conn.RemoteAddr())
 		c.room.broadcast(c, fmt.Sprintf("%s has left the room.", c.username), true)
+	}
+}
+
+func (s *server) sendPublicKeyToClient(c *client) {
+	msg := new(Message)
+	msg.PublicKey = SERVERKEY.PublicKey
+	msg.Sender = "serverkey"
+	err := c.enc.Encode(msg)
+	if err != nil {
+		panic(err)
 	}
 }

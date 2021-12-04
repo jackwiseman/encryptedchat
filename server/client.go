@@ -43,12 +43,15 @@ func (c *client) readInput() {
 			}
 		}
 
-
 		msgString := msg.Msg
-		msgString = strings.Trim(msgString, "\r\n")
 
+		if msg.Sender == "cmd" {
+			msgString, _ = decrypt(msg.Msg,SERVERKEY)
+		}
+		msgString = strings.Trim(msgString, "\r\n")
 		args := strings.Split(msgString, " ")
 		cmd := strings.TrimSpace(args[0])
+
 
 		if(msg.Sender == "auth") {
 			if(msg.Msg == c.authToken) {
@@ -120,7 +123,8 @@ func (c *client) readInput() {
 
 func (c *client) err(err error) {
 	message := new(Message)
-	message.Msg = "ERROR: " + err.Error() + "\n"
+	message.Msg = encrypt("ERROR: " + err.Error() + "\n", c.publicKey)
+	message.Sender = "server"
 
 	err2 := c.enc.Encode(message)
 	if err2 != nil {
@@ -142,8 +146,10 @@ func (c *client) msg(msg string, sender *client) {
 
 func (c* client) eventMsg(msg string) {
 	message := new(Message)
-	message.Msg = "# " + msg + "\n"
+	message.Msg = encrypt("# " + msg + "\n", c.publicKey)
+	message.Sender = "server"
 
+	
 	err := c.enc.Encode(message)
 	if err != nil {
 		panic(err)
@@ -190,7 +196,3 @@ func (c *client) auth(key rsa.PublicKey) {
 		panic(err)
 	}
 }
-
-//func (c *client) sendServerKey() {
-
-//}

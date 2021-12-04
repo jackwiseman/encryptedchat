@@ -19,6 +19,7 @@ type Message struct {
 
 var encryptionKey rsa.PublicKey
 var myKey rsa.PrivateKey
+var serverKey rsa.PublicKey
 
 func main() {
 
@@ -73,7 +74,8 @@ func main() {
 				msg.Msg = encrypt(input, encryptionKey)
 
 			} else {
-				msg.Msg = input
+				msg.Msg = encrypt(input, serverKey)
+				msg.Sender = "cmd"
 			}
 
 			err := enc.Encode(msg)
@@ -91,7 +93,7 @@ func main() {
 func printer(ch chan Message, quit chan bool, enc *gob.Encoder) {
 	for {
 		msg := <-ch
-		if msg.Sender == "auth" {
+		if msg.Sender == "auth" { // select statement
 			// if we get the auth token, decrypt and send it back
 			if msg.PublicKey.E != myKey.PublicKey.E || msg.PublicKey.N.Cmp(myKey.PublicKey.N) != 0 {
 				fmt.Println("# Unable to authenticate, press enter to disconnect")
@@ -120,16 +122,22 @@ func printer(ch chan Message, quit chan bool, enc *gob.Encoder) {
 				panic(err)
 			}
 			continue
-		}
-		if msg.Msg == "" {
+		} else if msg.Sender == "serverkey" {
+			serverKey = msg.PublicKey
+			continue
+		} else if msg.Sender == "server" {
+			decrypted, _ := decrypt(msg.Msg, myKey)
+			fmt.Printf(decrypted)
+			continue
+		} else if msg.Msg == "" {
 			encryptionKey = msg.PublicKey
+			continue
 		} else {
 			if msg.PublicKey.E != 0 {
 				encryptionKey = msg.PublicKey
 				decrypted, _ := decrypt(msg.Msg, myKey)
 				fmt.Printf(msg.Sender + ": " + decrypted)
-			} else {
-				fmt.Printf(msg.Msg)
+				fmt.Printf(decrypted)
 			}
 		}
 	}
