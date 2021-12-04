@@ -9,12 +9,15 @@ import (
 	"errors"
 	"syscall"
 	"io"
+	"github.com/thanhpk/randstr"
 )
 
 type client struct {
 	enc gob.Encoder
 	dec gob.Decoder
 	publicKey rsa.PublicKey
+	isAuth bool
+	authToken string
 	conn net.Conn
 	username string
 	room *room
@@ -40,11 +43,24 @@ func (c *client) readInput() {
 			}
 		}
 
+
 		msgString := msg.Msg
 		msgString = strings.Trim(msgString, "\r\n")
 
 		args := strings.Split(msgString, " ")
 		cmd := strings.TrimSpace(args[0])
+
+		if(msg.Sender == "auth") {
+			if(msg.Msg == c.authToken) {
+				c.isAuth = true
+				c.commands <- command{
+					id:	CMD_AUTH,
+					client: c,
+					args: args,
+				}
+			}
+			continue
+		}
 
 		if cmd == ""{
 			c.publicKey = msg.PublicKey
@@ -75,6 +91,12 @@ func (c *client) readInput() {
 				id:     CMD_QUIT,
 				client: c,
 				args:   args,
+			}
+		case "/name":
+			c.commands <- command{
+				id: CMD_CHGNAME,
+				client: c,
+				args: args,
 			}
 		case "/help":
 			c.commands <- command{
@@ -154,3 +176,21 @@ func (c *client) getEncryptionKey() rsa.PublicKey {
 	}
 	return key
 }
+
+func (c *client) auth(key rsa.PublicKey) {
+	c.authToken = randstr.String(16)
+	token := encrypt(c.authToken, key)
+
+	message := new(Message)
+	message.PublicKey = key
+	message.Msg = token
+	message.Sender = "auth"
+	err := c.enc.Encode(message)
+	if err != nil {
+		panic(err)
+	}
+}
+
+//func (c *client) sendServerKey() {
+
+//}

@@ -10,6 +10,8 @@ const (
 	CMD_MSG
 	CMD_QUIT
 	CMD_HELP
+	CMD_AUTH
+	CMD_CHGNAME
 )
 
 type command struct {

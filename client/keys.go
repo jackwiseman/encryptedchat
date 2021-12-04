@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/gob"
 	"os"
+	"errors"
 )
 
 func genKeys() {
@@ -68,15 +69,15 @@ func encrypt(message string, key rsa.PublicKey) string {
 	return base64.StdEncoding.EncodeToString(encrypted)
 }
 
-func decrypt(message string, key rsa.PrivateKey) string {
+func decrypt(message string, key rsa.PrivateKey) (string, error) {
 	msgBytes, err := base64.StdEncoding.DecodeString(message)
 	if err != nil {
-		panic(err)
+		return "", errors.New("Decoding error")
 	}
 	r := rand.Reader
 	decrypted, err2 := rsa.DecryptOAEP(sha256.New(), r, &key, msgBytes, []byte("OAEP"))
 	if err2 != nil {
-		panic(err2)
+		return "", errors.New("Decoding error")
 	}
-	return string(decrypted)
+	return string(decrypted), nil
 }

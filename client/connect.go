@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strings"
+//	"math/big"
 )
 
 type Message struct {
@@ -51,44 +52,82 @@ func main() {
 	}
 
 	ch := make(chan Message)
+	quit := make(chan bool, 2)
+
 	fmt.Println("# You have joined encryptedchat. Type /help for more info, /quit to exit.")
-	go printer(ch)
-	go listener(ch, dec)
+	go printer(ch, quit, enc)
+	go listener(ch, quit, dec)
 
 	for {
 		reader := bufio.NewReader(os.Stdin)
 		input, _ := reader.ReadString('\n')
-		if input == ""{
-			continue
-		}
-		msg := new(Message)
-		if encryptionKey.E != 0 && string(input)[0:1] != "/" {
-			msg.Msg = encrypt(input, encryptionKey)
-
-		} else {
-			msg.Msg = input
-		}
-
-		err := enc.Encode(msg)
-		if err != nil {
-			panic(err)
-		}
-
-		if strings.TrimSpace(string(input)) == "/quit" {
-			fmt.Println("# Disconnected")
+		select {
+		case <- quit:
 			return
+		default:
+			if input == ""{
+				continue
+			}
+			msg := new(Message)
+			if encryptionKey.E != 0 && string(input)[0:1] != "/" {
+				msg.Msg = encrypt(input, encryptionKey)
+
+			} else {
+				msg.Msg = input
+			}
+
+			err := enc.Encode(msg)
+			if err != nil {
+				panic(err)
+			}
+
+			if strings.TrimSpace(string(input)) == "/quit" {
+				fmt.Println("# Disconnected")
+				return
+			}
 		}
 	}
 }
-func printer(ch chan Message) {
+func printer(ch chan Message, quit chan bool, enc *gob.Encoder) {
 	for {
 		msg := <-ch
-		if (msg.Msg == "") {
+		if msg.Sender == "auth" {
+			// if we get the auth token, decrypt and send it back
+			if msg.PublicKey.E != myKey.PublicKey.E || msg.PublicKey.N.Cmp(myKey.PublicKey.N) != 0 {
+				fmt.Println("# Unable to authenticate, press enter to disconnect")
+				quit <- true
+				return
+			}
+
+			// this is likely the same thing as above, but safe to still error handle
+			token, issue := decrypt(msg.Msg, myKey)
+			if issue != nil {
+				if strings.Contains(issue.Error(), "Decoding error") {
+					panic(issue)
+				}
+				if strings.Contains(issue.Error(), "Decryption error") {
+					fmt.Println("# Unable to authenticate, press enter to disconnect")
+					quit <- true
+					return
+				}
+			}
+
+			response := new(Message)
+			response.Sender = "auth"
+			response.Msg = token
+			err := enc.Encode(response)
+			if err != nil {
+				panic(err)
+			}
+			continue
+		}
+		if msg.Msg == "" {
 			encryptionKey = msg.PublicKey
 		} else {
 			if msg.PublicKey.E != 0 {
 				encryptionKey = msg.PublicKey
-				fmt.Printf(msg.Sender + ": " + decrypt(msg.Msg, myKey))
+				decrypted, _ := decrypt(msg.Msg, myKey)
+				fmt.Printf(msg.Sender + ": " + decrypted)
 			} else {
 				fmt.Printf(msg.Msg)
 			}
@@ -96,13 +135,18 @@ func printer(ch chan Message) {
 	}
 }
 
-func listener(ch chan Message, dec *gob.Decoder){
+func listener(ch chan Message, quit chan bool, dec *gob.Decoder){
 	for {
-		msg := new(Message)
-		err := dec.Decode(msg)
-		if err != nil {
-			panic(err)
+		select {
+		case <- quit:
+			return
+		default:
+			msg := new(Message)
+			err := dec.Decode(msg)
+			if err != nil {
+				panic(err)
+			}
+			ch <- *msg
 		}
-		ch <- *msg
 	}
 }
