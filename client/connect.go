@@ -22,9 +22,9 @@ var myKey rsa.PrivateKey
 var serverKey rsa.PublicKey
 
 func main() {
-
 	arguments := os.Args
-	if len(arguments) == 1 {
+
+	if len(arguments) != 2 {
 		fmt.Println("# Please provide host:port.")
 		return
 	}
@@ -40,6 +40,8 @@ func main() {
 	gob.Register(new(Message))
 	dec := gob.NewDecoder(c)
 	enc := gob.NewEncoder(c)
+	ch := make(chan Message)
+	quit := make(chan bool, 2)
 
 	// Create and send key to server
 	loadPrivateKey(&myKey)
@@ -52,10 +54,8 @@ func main() {
 		panic(err)
 	}
 
-	ch := make(chan Message)
-	quit := make(chan bool, 2)
 
-	fmt.Println("# You have joined encryptedchat. Type /help for more info, /quit to exit.")
+	fmt.Println("# Connected to remote server. Type /login {username} to login, /quit to exit, /help for more commands.")
 	go printer(ch, quit, enc)
 	go listener(ch, quit, dec)
 
@@ -93,53 +93,42 @@ func main() {
 func printer(ch chan Message, quit chan bool, enc *gob.Encoder) {
 	for {
 		msg := <-ch
-		if msg.Sender == "auth" { // select statement
-			// if we get the auth token, decrypt and send it back
-			if msg.PublicKey.E != myKey.PublicKey.E || msg.PublicKey.N.Cmp(myKey.PublicKey.N) != 0 {
-				fmt.Println("# Unable to authenticate, press enter to disconnect")
-				quit <- true
-				return
-			}
-
-			// this is likely the same thing as above, but safe to still error handle
-			token, issue := decrypt(msg.Msg, myKey)
-			if issue != nil {
-				if strings.Contains(issue.Error(), "Decoding error") {
-					panic(issue)
-				}
-				if strings.Contains(issue.Error(), "Decryption error") {
+		switch msg.Sender {
+			case "auth" : // select statement
+				// if we get the auth token, decrypt and send it back
+				token, issue := decrypt(msg.Msg, myKey)
+				if issue != nil {
 					fmt.Println("# Unable to authenticate, press enter to disconnect")
 					quit <- true
 					return
 				}
-			}
 
-			response := new(Message)
-			response.Sender = "auth"
-			response.Msg = token
-			err := enc.Encode(response)
-			if err != nil {
-				panic(err)
-			}
-			continue
-		} else if msg.Sender == "serverkey" {
-			serverKey = msg.PublicKey
-			continue
-		} else if msg.Sender == "server" {
-			decrypted, _ := decrypt(msg.Msg, myKey)
-			fmt.Printf(decrypted)
-			continue
-		} else if msg.Msg == "" {
-			encryptionKey = msg.PublicKey
-			continue
-		} else {
-			if msg.PublicKey.E != 0 {
-				encryptionKey = msg.PublicKey
+				response := new(Message)
+
+				response.Sender = "auth"
+				response.Msg = token
+
+				err := enc.Encode(response)
+				if err != nil {
+					panic(err)
+				}
+
+			case "serverkey" :
+				serverKey = msg.PublicKey
+			case "server" :
 				decrypted, _ := decrypt(msg.Msg, myKey)
-				fmt.Printf(msg.Sender + ": " + decrypted)
 				fmt.Printf(decrypted)
+			default:
+				if msg.Msg == "" {
+					encryptionKey = msg.PublicKey
+				} else {
+					if msg.PublicKey.E != 0 {
+						encryptionKey = msg.PublicKey
+						decrypted, _ := decrypt(msg.Msg, myKey)
+						fmt.Printf(msg.Sender + ": " + decrypted)
+					}
+				}
 			}
-		}
 	}
 }
 

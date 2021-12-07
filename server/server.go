@@ -68,47 +68,56 @@ func (s *server) newClient(conn net.Conn) {
 }
 
 func (s *server) login(c *client, args []string) {
-	if len(args) != 2 {
-		c.eventMsg(fmt.Sprintf("Your username must be one word, please try again"))
+	if c.isAuth {
+		c.eventMsg("You are already logged in")
 		return
 	}
+
+	if len(args) != 2 {
+		c.eventMsg("Your username must be one word, please try again")
+		return
+	}
+
 	if args[1] == "server" || args[1] == "serverkey" || args[1] == "auth" {
-		c.eventMsg(fmt.Sprintf("Illegal name choice, please try again"))
+		c.eventMsg("Illegal name choice, please try again")
 		return
 	}
 
 	for user, k := range s.users {
 		if k.E == c.publicKey.E && k.N.Cmp(c.publicKey.N) == 0 {
 			if args[1] != user {
-				c.eventMsg(fmt.Sprintf("You cannot login as that user, please try again"))
+				c.eventMsg("You cannot login as that user, please try again")
 				return
 			}
 		}
 	}
+
 	c.username = args[1]
+
 	key, ok := s.users[c.username]
 	if ok { // need to auth
 		c.eventMsg(fmt.Sprintf("Logging in as %s...", c.username))
 		c.auth(key)
 	} else { // new account, no need to auth
 		s.users[c.username] = c.publicKey
+		c.isAuth = true
 		c.eventMsg(fmt.Sprintf("Welcome new user %s, your connection is now secure", c.username))
 	}
 }
 
 func (s *server) changeName(c *client, args []string) {
 	if len(args) != 2 {
-		c.eventMsg(fmt.Sprintf("Your username must be one word, please try again"))
+		c.eventMsg("Your username must be one word, please try again")
 		return
 	}
 	for user, _ := range s.users {
 		if args[1] == user {
-			c.eventMsg(fmt.Sprintf("That username is already taken, please try again"))
+			c.eventMsg("That username is already taken, please try again")
 			return
 		}
 	}
 	if args[1] == "server" || args[1] == "serverkey" || args[1] == "auth" {
-		c.eventMsg(fmt.Sprintf("Illegal name choice, please try again"))
+		c.eventMsg("Illegal name choice, please try again")
 		return
 	}
 	c.username = args[1]
@@ -124,36 +133,36 @@ func (s *server) authenticated(c *client) {
 func (s *server) join(c *client, args []string) {
 
 	if len(args) != 2 {
-		c.eventMsg(fmt.Sprintf("Please specify a room name you would like to join (rooms must be one word)"))
+		c.eventMsg("Please specify a room name you would like to join (rooms must be one word)")
 		return
 	}
 
-	if c.username != "" {
-		roomName := args[1]
-		r, ok := s.rooms[roomName]
-		if !ok {
-			r = &room{
-				name:    roomName,
-				members: make(map[net.Addr]*client),
-				keys: make(map[net.Addr]rsa.PublicKey),
-			}
-			s.rooms[roomName] = r
-		}
-		if len(r.members) >= 2 {
-			c.eventMsg(fmt.Sprintf("You can't join that room!"))
-		} else {
-			r.members[c.conn.RemoteAddr()] = c
-			r.keys[c.conn.RemoteAddr()] = c.publicKey
-
-		}
-
-		s.quitCurrentRoom(c)
-		c.room = r
-		r.broadcast(c, fmt.Sprintf("%s has joined the room.", c.username), true)
-		c.eventMsg(fmt.Sprintf("Welcome to the room %s", r.name))
-	} else {
-		c.eventMsg(fmt.Sprintf("You must login before joining a room!"))
+	if !c.isAuth {
+		c.eventMsg("You must login before joining a room!")
+		return
 	}
+
+	roomName := args[1]
+	r, exists := s.rooms[roomName]
+	if !exists {
+		r = &room{
+			name:    roomName,
+			members: make(map[net.Addr]*client),
+			keys: make(map[net.Addr]rsa.PublicKey),
+		}
+		s.rooms[roomName] = r
+	}
+	if len(r.members) >= 2 {
+		c.eventMsg("You can't join that room!")
+	} else {
+		r.members[c.conn.RemoteAddr()] = c
+		r.keys[c.conn.RemoteAddr()] = c.publicKey
+	}
+
+	s.quitCurrentRoom(c)
+	c.room = r
+	r.broadcast(c, fmt.Sprintf("%s has joined the room.", c.username), true)
+	c.eventMsg(fmt.Sprintf("Welcome to the room %s", r.name))
 }
 
 func (s *server) listRooms(c *client, args []string) {
@@ -163,19 +172,19 @@ func (s *server) listRooms(c *client, args []string) {
 	}
 
 	if len(rooms) == 0 {
-		c.eventMsg(fmt.Sprintf("There are no active rooms, create one with /join {name}"))
+		c.eventMsg("There are no active rooms, create one with /join {name}")
 	} else {
 		c.eventMsg(fmt.Sprintf("Available rooms: %s", strings.Join(rooms, ", ")))
 	}
 }
 
 func (s *server) msg(c *client, args []string) {
-	if c.username == "" {
-		c.eventMsg(fmt.Sprintf("You must login before sending a message - /login {username}"))
+	if !c.isAuth {
+		c.eventMsg("You must login before sending a message - /login {username}")
 		return
 	}
 	if c.room == nil {
-		c.eventMsg(fmt.Sprintf("You must join a room before sending a message - /join {room name}"))
+		c.eventMsg("You must join a room before sending a message - /join {room name}")
 		return
 	}
 
@@ -195,9 +204,13 @@ func (s *server) help(c *client, args[]string) {
 
 func (s *server) quitCurrentRoom(c *client) {
 	if c.room != nil {
-		delete(c.room.members, c.conn.RemoteAddr())
-		delete(c.room.keys, c.conn.RemoteAddr())
-		c.room.broadcast(c, fmt.Sprintf("%s has left the room.", c.username), true)
+		if len(c.room.members) > 1 {
+			delete(c.room.members, c.conn.RemoteAddr())
+			delete(c.room.keys, c.conn.RemoteAddr())
+			c.room.broadcast(c, fmt.Sprintf("%s has left the room.", c.username), true)
+		} else {
+			delete(s.rooms, c.room.name)
+		}
 	}
 }
 

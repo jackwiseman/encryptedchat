@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"errors"
-	"syscall"
-	"io"
 	"github.com/thanhpk/randstr"
 )
 
@@ -36,22 +33,18 @@ func (c *client) readInput() {
 		msg := new(Message)
 		err := c.dec.Decode(msg)
 		if err != nil {
-			if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, io.EOF) || strings.Contains(err.Error(), "use of closed network connection"){
-				return
-			} else {
-				panic(err)
-			}
+			return // ie disconnect the client immediately
 		}
 
-		msgString := msg.Msg
+		userInput := msg.Msg
 
 		if msg.Sender == "cmd" {
-			msgString, _ = decrypt(msg.Msg,SERVERKEY)
+			userInput, _ = decrypt(msg.Msg,SERVERKEY)
 		}
-		msgString = strings.Trim(msgString, "\r\n")
-		args := strings.Split(msgString, " ")
-		cmd := strings.TrimSpace(args[0])
 
+		userInput = strings.Trim(userInput, "\r\n")
+		args := strings.Split(userInput, " ")
+		cmd := strings.TrimSpace(args[0])
 
 		if(msg.Sender == "auth") {
 			if(msg.Msg == c.authToken) {
@@ -65,12 +58,9 @@ func (c *client) readInput() {
 			continue
 		}
 
-		if cmd == ""{
-			c.publicKey = msg.PublicKey
-			continue
-		}
-
 		switch cmd {
+		case "":
+			c.publicKey = msg.PublicKey
 		case "/login":
 			c.commands <- command{
 				id:     CMD_LOGIN,
@@ -149,7 +139,6 @@ func (c* client) eventMsg(msg string) {
 	message.Msg = encrypt("# " + msg + "\n", c.publicKey)
 	message.Sender = "server"
 
-	
 	err := c.enc.Encode(message)
 	if err != nil {
 		panic(err)
@@ -188,7 +177,6 @@ func (c *client) auth(key rsa.PublicKey) {
 	token := encrypt(c.authToken, key)
 
 	message := new(Message)
-	message.PublicKey = key
 	message.Msg = token
 	message.Sender = "auth"
 	err := c.enc.Encode(message)
