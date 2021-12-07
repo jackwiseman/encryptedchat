@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"strings"
-//	"math/big"
 )
 
 type Message struct {
@@ -48,6 +47,7 @@ func main() {
 
 	msg := new(Message)
 	msg.PublicKey = myKey.PublicKey
+	msg.Sender = "keyX"
 
 	err = enc.Encode(msg)
 	if err != nil {

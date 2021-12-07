@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/gob"
+//	"encoding/hex"
 	"crypto/rsa"
 	"fmt"
 	"log"
@@ -78,7 +79,7 @@ func (s *server) login(c *client, args []string) {
 		return
 	}
 
-	if args[1] == "server" || args[1] == "serverkey" || args[1] == "auth" {
+	if args[1] == "server" || args[1] == "serverkey" || args[1] == "auth" || args[1] == "keyX" || len(args[1]) == 0 {
 		c.eventMsg("Illegal name choice, please try again")
 		return
 	}
@@ -106,6 +107,10 @@ func (s *server) login(c *client, args []string) {
 }
 
 func (s *server) changeName(c *client, args []string) {
+	if !c.isAuth {
+		c.eventMsg("You must be logged in to change your name")
+		return
+	}
 	if len(args) != 2 {
 		c.eventMsg("Your username must be one word, please try again")
 		return
@@ -116,10 +121,11 @@ func (s *server) changeName(c *client, args []string) {
 			return
 		}
 	}
-	if args[1] == "server" || args[1] == "serverkey" || args[1] == "auth" {
+	if args[1] == "server" || args[1] == "serverkey" || args[1] == "auth" || args[1] == "keyX" || len(args[1]) == 0 {
 		c.eventMsg("Illegal name choice, please try again")
 		return
 	}
+
 	c.username = args[1]
 	delete(s.users, c.username)
 	s.users[c.username] = c.publicKey
@@ -132,13 +138,13 @@ func (s *server) authenticated(c *client) {
 
 func (s *server) join(c *client, args []string) {
 
-	if len(args) != 2 {
-		c.eventMsg("Please specify a room name you would like to join (rooms must be one word)")
+	if !c.isAuth {
+		c.eventMsg("You must login before joining a room!")
 		return
 	}
 
-	if !c.isAuth {
-		c.eventMsg("You must login before joining a room!")
+	if len(args) != 2 || len(args[1]) == 0 {
+		c.eventMsg("Please specify a room name you would like to join (rooms must be one word)")
 		return
 	}
 
@@ -152,8 +158,16 @@ func (s *server) join(c *client, args []string) {
 		}
 		s.rooms[roomName] = r
 	}
+
+	_, ok := r.members[c.conn.RemoteAddr()]
+	if ok {
+		c.eventMsg("You are already in this room")
+		return
+	}
+
 	if len(r.members) >= 2 {
-		c.eventMsg("You can't join that room!")
+		c.eventMsg("That room is full, try a different one or create your own")
+		return
 	} else {
 		r.members[c.conn.RemoteAddr()] = c
 		r.keys[c.conn.RemoteAddr()] = c.publicKey
@@ -166,13 +180,20 @@ func (s *server) join(c *client, args []string) {
 }
 
 func (s *server) listRooms(c *client, args []string) {
+	if !c.isAuth {
+		c.eventMsg("You must login before using this command")
+		return
+	}
+
 	var rooms []string
 	for name := range s.rooms {
-		rooms = append(rooms, name)
+		if len(s.rooms[name].members) < 2 {
+			rooms = append(rooms, name)
+		}
 	}
 
 	if len(rooms) == 0 {
-		c.eventMsg("There are no active rooms, create one with /join {name}")
+		c.eventMsg("There are no joinable rooms, create one with /join {name}")
 	} else {
 		c.eventMsg(fmt.Sprintf("Available rooms: %s", strings.Join(rooms, ", ")))
 	}

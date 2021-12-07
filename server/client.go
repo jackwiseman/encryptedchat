@@ -58,9 +58,16 @@ func (c *client) readInput() {
 			continue
 		}
 
-		switch cmd {
-		case "":
+		if (msg.Sender == "keyX") {
 			c.publicKey = msg.PublicKey
+			continue
+		}
+
+		if len(cmd) == 0 {
+			continue
+		}
+
+		switch cmd {
 		case "/login":
 			c.commands <- command{
 				id:     CMD_LOGIN,
